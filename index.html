@@ -896,10 +896,15 @@ body.sala-popup-open{overflow:hidden}
 </section>
 
 <section class="view" id="leads">
- <div class="section-head"><div><h2>Leads CRM</h2><p>Consulta de leads e histórico provenientes del CRM.</p></div></div>
- <div class="grid kpis"><div class="card kpi"><small>LEADS TOTALES</small><b>1.890</b></div><div class="card kpi"><small>NUEVOS</small><b>328</b></div><div class="card kpi"><small>CONTACTADOS</small><b>976</b></div><div class="card kpi"><small>CONVERTIDOS</small><b>214</b></div></div>
- <div class="grid two"><div class="card bars"><h3 style="margin-top:0;color:var(--green)">Leads por fuente</h3><div class="bar"><div class="bar-top"><span>Web</span><span>48%</span></div><div class="track"><div class="fill" style="width:48%"></div></div></div><div class="bar"><div class="bar-top"><span>Eventos</span><span>32%</span></div><div class="track"><div class="fill" style="width:32%"></div></div></div><div class="bar"><div class="bar-top"><span>Referidos</span><span>20%</span></div><div class="track"><div class="fill" style="width:20%"></div></div></div></div>
- <div class="card"><h3 style="margin-top:0;color:var(--green)">Histórico CRM</h3><p style="color:var(--muted);line-height:1.7">Este módulo está preparado para consultar el histórico de oportunidades y realizar filtros por programa, fuente, estado y cohorte.</p><span class="pill crm">Fuente: CRM</span></div></div>
+ <div class="section-head"><div><h2>Leads CRM</h2><p>Resumen de la base cargada durante esta sesión.</p></div><button class="btn" id="loadCrmLeads">Cargar / consultar base de Leads</button></div>
+ <div class="card" id="crmEmpty" role="status"><h3>Debes cargar la base de datos de Leads</h3><p>Usa el botón «Cargar / consultar base de Leads» para seleccionar un Excel o CSV. Los datos se muestran solo durante esta sesión y se eliminan al recargar la página.</p></div>
+ <div id="crmResults" hidden>
+ <p id="crmCountNote" role="status"></p>
+ <div class="grid kpis"><div class="card kpi"><small>LEADS TOTALES</small><b id="crmTotal">0</b></div><div class="card kpi"><small>CON COMENTARIOS</small><b id="crmComments">0</b></div><div class="card kpi"><small>CON ÚLTIMA ACTIVIDAD</small><b id="crmActivity">0</b></div><div class="card kpi"><small>PROGRAMAS</small><b id="crmPrograms">0</b></div></div>
+ <div class="card"><h3>Leads por programa</h3><div id="crmProgramBars"></div></div>
+ <p class="notice">El resumen refleja los filtros aplicados en el reporte. La base no incluye columnas de estado ni de fuente para calcular nuevos, contactados, convertidos u origen.</p>
+ <button class="btn secondary" id="clearCrmLeads">Quitar base</button>
+ </div>
 </section>
 
 <section class="view" id="docentes">
@@ -1082,6 +1087,7 @@ renderTree();renderProgram();renderTeachers();animateCounters();renderDashboard(
       <strong id="salaPopupTitle">SALA · Informes rápidos</strong>
       <button type="button" id="closeSalaPopup" aria-label="Cerrar ventana">×</button>
     </div>
+    <iframe id="leadsPopupFrame" title="Reporte de Leads" src="leads.html" style="display:none;width:100%;flex:1;border:0;background:#fff"></iframe>
     <iframe id="salaPopupFrame" title="Información SALA" src="sala.html"></iframe>
   </div>
 </div>
@@ -1099,7 +1105,9 @@ renderTree();renderProgram();renderTeachers();animateCounters();renderDashboard(
     link.setAttribute('aria-haspopup','dialog');
     link.addEventListener('click',function(e){
       e.preventDefault();trigger=link;
-      if(frame.getAttribute('src')!==url)frame.src=url;
+      const leadsFrame=document.getElementById('leadsPopupFrame');
+      const isLeads=url==='leads.html';
+      frame.style.display=isLeads?'none':'block';leadsFrame.style.display=isLeads?'block':'none';
       frame.title=label;title.textContent=label;
       popup.classList.add('is-open');popup.setAttribute('aria-hidden','false');document.body.classList.add('sala-popup-open');close.focus();
     });
@@ -1113,6 +1121,26 @@ renderTree();renderProgram();renderTeachers();animateCounters();renderDashboard(
     if(e.key==='Escape')closePopup();
     if(e.key==='Tab'&&e.shiftKey&&document.activeElement===close){e.preventDefault();frame.focus();}
   });
+})();
+</script>
+<script id="crm-session-sync">
+(function(){
+ const byId=id=>document.getElementById(id);
+ const frame=byId('leadsPopupFrame');
+ byId('loadCrmLeads').onclick=()=>byId('openLeadsPopup').click();
+ function clear(){byId('crmEmpty').hidden=false;byId('crmResults').hidden=true;document.querySelector('.home-kpi-card:nth-child(3) strong');const cards=document.querySelectorAll('.home-kpi-card');cards.forEach(c=>{if(c.textContent.includes('LEADS REGISTRADOS'))c.querySelector('strong').textContent='Sin base';});}
+ byId('clearCrmLeads').onclick=()=>{frame.src='leads.html';clear();};
+ window.addEventListener('message',e=>{
+  if(e.source!==frame.contentWindow || (location.protocol!=='file:'&&e.origin!==location.origin))return;
+  const m=e.data;if(!m||m.type!=='crm-leads-summary')return;
+  byId('crmEmpty').hidden=true;byId('crmResults').hidden=false;
+  const fmt=n=>Number(n).toLocaleString('es-CO');
+  byId('crmTotal').textContent=fmt(m.total);byId('crmComments').textContent=fmt(m.comments);byId('crmActivity').textContent=fmt(m.activity);byId('crmPrograms').textContent=fmt(m.programs.length);
+  byId('crmCountNote').textContent=fmt(m.total)+' de '+fmt(m.loaded)+' registros cargados (según filtros del reporte).';
+  const bars=byId('crmProgramBars');bars.replaceChildren();
+  m.programs.forEach(([name,count])=>{const row=document.createElement('p');row.textContent=name+': '+fmt(count);bars.appendChild(row);});
+  document.querySelectorAll('.home-kpi-card').forEach(c=>{if(c.textContent.includes('LEADS REGISTRADOS'))c.querySelector('strong').textContent=fmt(m.loaded);});
+ });clear();
 })();
 </script>
 </body>
