@@ -219,6 +219,12 @@ details.log li{margin:4px 0}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Gráficas de estados: etiquetas visibles e impresión sin dependencias. */
+.sala-chart{margin:20px 0;break-inside:avoid}.sala-chart h4{margin:0 0 14px;font-size:14px;color:var(--muted)}
+.sala-chart-row{margin:14px 0}.sala-chart-label{display:flex;justify-content:space-between;align-items:baseline;gap:14px;font-size:14px;margin-bottom:5px}.sala-chart-label span{overflow-wrap:anywhere}.sala-chart-label strong{white-space:nowrap;font-variant-numeric:tabular-nums}.sala-chart svg{width:100%;height:16px;display:block}.sala-chart-total{border-top:1px solid var(--line);padding-top:12px;font-weight:700}.sala-chart-note{color:var(--muted);font-size:12px;line-height:1.5}.sala-chart-empty{padding:22px 0;color:var(--muted)}
+@media(max-width:600px){.sala-chart-label{font-size:12px;flex-wrap:wrap;gap:4px}.sala-chart-label strong{white-space:normal}}
+
 </style>
 
 <style id="sigec-visual-adjustment">
@@ -2869,6 +2875,7 @@ if (typeof module!=='undefined') module.exports = Core;
     var h = '<section class="view"><div class="vhead"><div><h2>Consolidado de programas</h2><div class="meta">Corte al '+fdate(S.corte)+' · '+S.progs.length+' programa'+(S.progs.length>1?'s':'')+' · '+t.crudas+' órdenes crudas depuradas a '+t.inscritos+' inscritos</div></div>'+
       '<div class="vactions">'+dlMenu(null)+'</div></div>';
     h += figs(t);
+    h += salaStateCharts([].concat.apply([],S.progs.map(function(p){return p.res.rows;})),false);
     h += '<div class="tbl-wrap"><table class="gen"><thead><tr>'+
       '<th rowspan="2">Programa</th><th rowspan="2" class="num">Inscritos</th>'+
       '<th colspan="2" class="grp c-pag">Pagadas</th><th colspan="2" class="grp c-act">Activas</th><th colspan="2" class="grp c-ven">Vencidas</th>'+
@@ -2936,6 +2943,30 @@ if (typeof module!=='undefined') module.exports = Core;
   }
 
   var FIELDS=['orden','documento','fechaLimite','estado1','estado2','valor','nombre','correo','telefono','celular'];
+  function salaChartBars(title, entries, total, currency){
+    var h='<div class="sala-chart"><h4>'+esc(title)+'</h4>';
+    if(!total) return h+'<p class="sala-chart-empty">No hay datos para graficar.</p></div>';
+    entries.forEach(function(e){
+      var share=total?e.value/total:0, width=Math.max(0,Math.min(100,share*100));
+      var label=e.label+': '+(currency?money(e.value):Core.fmtN(e.value))+' · '+pct(share);
+      h+='<div class="sala-chart-row"><div class="sala-chart-label"><span>'+esc(e.label)+'</span><strong>'+(currency?money(e.value):Core.fmtN(e.value))+' · '+pct(share)+'</strong></div>'+
+        '<svg viewBox="0 0 100 4" preserveAspectRatio="none" role="img" aria-label="'+esc(label)+'"><title>'+esc(label)+'</title><rect width="100" height="4" rx="2" fill="#e3ece8"/><rect width="'+width+'" height="4" rx="2" fill="'+e.color+'"/></svg></div>';
+    });
+    return h+'<div class="sala-chart-total">Total: '+(currency?money(total):Core.fmtN(total))+'</div></div>';
+  }
+  function salaStateCharts(rows, filtered){
+    var states=[['Pagada','#00965e'],['Activa','#1f6fb5'],['Vencida','#d2453d'],['Otro','#8465b4']];
+    var payments=states.map(function(e){return {label:e[0],color:e[1],value:0,amount:0};});
+    var academic=Object.create(null),total=0;
+    rows.forEach(function(r){var i=states.findIndex(function(e){return e[0]===r.estado2;});if(i<0)i=3;payments[i].value++;payments[i].amount+=Number(r.valor)||0;total+=Number(r.valor)||0;var key=r.estado1||'Sin dato';academic[key]=(academic[key]||0)+1;});
+    payments=payments.filter(function(e){return e.label!=='Otro'||e.value;});
+    var amounts=payments.map(function(e){return {label:e.label,color:e.color,value:e.amount};});
+    var palette=['#014948','#00965e','#1f6fb5','#8465b4','#b87019'];
+    var a=Object.keys(academic).sort(function(x,y){return academic[y]-academic[x];}).map(function(k,i){return {label:k,value:academic[k],color:palette[i%palette.length]};});
+    return '<div class="cols2"><div class="box"><h3>Resumen por Estado 2</h3><p class="sala-chart-note">Estado del pago · '+(filtered?'Según la búsqueda y los filtros actuales.':'Todos los programas cargados.')+'</p>'+salaChartBars('Distribución de inscritos',payments,rows.length,false)+salaChartBars('Valor de las órdenes por estado',amounts,total,true)+'</div>'+
+      '<div class="box"><h3>Resumen por Estado 1</h3><p class="sala-chart-note">Estado académico · '+(filtered?'Según la búsqueda y los filtros actuales.':'Todos los programas cargados.')+'</p>'+salaChartBars('Distribución de inscritos',a,rows.length,false)+'</div></div>';
+  }
+
   function renderProg(p){
     var r=p.res, s=r.stats, k=p.programa;
     var f = S.filt[k] || (S.filt[k]={estado:'Todos', q:''});
@@ -2953,12 +2984,7 @@ if (typeof module!=='undefined') module.exports = Core;
     if (p.aplazado) h+='<th class="sort" data-f="periodo">Periodo'+(so.by==='periodo'?(so.dir>0?' ▲':' ▼'):'')+'</th>';
     h+='</tr></thead><tbody id="tb"></tbody><tfoot id="tf"></tfoot></table></div>';
     h+=tarifasHTML(s);
-    h+='<div class="cols2"><div class="box"><h3>Resumen por Estado 2</h3><div class="tbl-wrap"><table><thead><tr><th>Estado 2</th><th class="num">No.</th><th class="num">% inscritos</th><th class="num">Valor</th></tr></thead><tbody>';
-    [['Pagada','pagada'],['Activa','activa'],['Vencida','vencida'],['Otro','otro']].forEach(function(x){ if (x[1]!=='otro' || s.otro.n) h+='<tr><td><span class="pill-e p-'+(x[1]==='otro'?'otro':x[0])+'">'+x[0]+'</span></td><td class="num">'+s[x[1]].n+'</td><td class="num">'+pct(s.inscritos? s[x[1]].n/s.inscritos:0)+'</td><td class="num">'+money(s[x[1]].v)+'</td></tr>'; });
-    h+='</tbody><tfoot><tr><td>Total</td><td class="num">'+s.inscritos+'</td><td class="num">100%</td><td class="num">'+money(s.total)+'</td></tr></tfoot></table></div></div>';
-    h+='<div class="box"><h3>Resumen por Estado 1</h3><div class="tbl-wrap"><table><thead><tr><th>Estado 1</th><th class="num">No.</th></tr></thead><tbody>';
-    Object.keys(s.estado1).forEach(function(e){ h+='<tr><td>'+esc(e)+'</td><td class="num">'+s.estado1[e]+'</td></tr>'; });
-    h+='</tbody><tfoot><tr><td>Total</td><td class="num">'+s.inscritos+'</td></tr></tfoot></table></div></div></div>';
+    h+='<div id="salaStateCharts" aria-live="polite"></div>';
     // Depuración
     h+='<details class="log"><summary>Cómo se depuró: '+s.crudas+' órdenes crudas → '+s.inscritos+' inscritos'+(r.alerts.length?' · '+r.alerts.length+' observaciones':'')+'</summary><div class="in">'+
       '<ol class="steps"><li>Se descartaron '+s.anuladas+' órdenes anuladas (“Anulada” y “Anula Plan de Pagos”).'+(s.sinOrden?' '+s.sinOrden+(s.sinOrden>1?' personas quedaron':' persona quedó')+' sin ninguna orden válida y no aparece'+(s.sinOrden>1?'n':'')+' en el informe.':'')+'</li>'+
@@ -2999,6 +3025,7 @@ if (typeof module!=='undefined') module.exports = Core;
     });
     if (!rows.length) h='<tr><td colspan="10" class="empty">No hay inscritos con ese filtro.</td></tr>';
     $('tb').innerHTML=h;
+    if($('salaStateCharts')) $('salaStateCharts').innerHTML=salaStateCharts(rows,true);
     var sum=rows.reduce(function(a,r){return a+r.valor;},0);
     $('tf').innerHTML='<tr><td>Total</td><td></td><td></td><td></td><td>'+rows.length+'</td><td class="num">'+money(sum)+'</td><td colspan="4"></td></tr>';
   }
